@@ -425,9 +425,8 @@
                     class="message-input" 
                     placeholder="Type a message... (Use :command for commands)"
                     rows="1"
-                    disabled
                 ></textarea>
-                <button id="sendBtn" class="send-btn" disabled>Send</button>
+                <button id="sendBtn" class="send-btn">Send</button>
             </div>
         </div>
     </div>
@@ -512,8 +511,6 @@
                         this.updateConnectionStatus('connected', 'Connected');
                         this.connectBtn.textContent = 'Disconnect';
                         this.connectBtn.disabled = false;
-                        this.messageInput.disabled = false;
-                        this.sendBtn.disabled = false;
                         this.messageInput.focus();
                         this.addSystemMessage('Connected to marchat server');
                     };
@@ -553,8 +550,6 @@
                 this.updateConnectionStatus('error', 'Disconnected');
                 this.connectBtn.textContent = 'Connect';
                 this.connectBtn.disabled = false;
-                this.messageInput.disabled = true;
-                this.sendBtn.disabled = true;
                 this.updateUserList();
                 this.addSystemMessage('Disconnected from server');
             }
@@ -602,7 +597,7 @@
 
             sendMessage() {
                 const content = this.messageInput.value.trim();
-                if (!content || !this.connected || this.socket.readyState !== WebSocket.OPEN) {
+                if (!content) {
                     return;
                 }
 
@@ -611,15 +606,27 @@
                     if (content.startsWith(':')) {
                         const command = content.substring(1);
                         this.addCommandMessage(`Command executed: :${command}`);
-                        this.socket.send(JSON.stringify({
-                            type: 'command',
-                            command: command
-                        }));
+                        this.simulateCommandResponse(command);
+                        
+                        // Send to server if connected
+                        if (this.connected && this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            this.socket.send(JSON.stringify({
+                                type: 'command',
+                                command: command
+                            }));
+                        }
                     } else {
-                        this.socket.send(JSON.stringify({
-                            type: 'message',
-                            content: content
-                        }));
+                        // Add message locally (simulate sendinv)
+                        const currentUser = this.username || 'you';
+                        this.addChatMessage(currentUser, content, Date.now());
+                        
+                        // Send to server if connected
+                        if (this.connected && this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            this.socket.send(JSON.stringify({
+                                type: 'message',
+                                content: content
+                            }));
+                        }
                     }
 
                     this.messageInput.value = '';
@@ -775,11 +782,41 @@
                 this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
             }
 
+            simulateCommandResponse(command) {
+                // Simulate various marchat command responses
+                switch (command.toLowerCase()) {
+                    case 'help':
+                        this.addSystemMessage('Available commands: :help, :users, :theme [patriot|retro|modern], :cleardb, :quit');
+                        break;
+                    case 'users':
+                        this.addSystemMessage(`Online users: ${Array.from(this.users).join(', ')}`);
+                        break;
+                    case 'cleardb':
+                        this.addSystemMessage('Database cleared successfully');
+                        break;
+                    case 'quit':
+                        this.addSystemMessage('Goodbye!');
+                        break;
+                    default:
+                        if (command.startsWith('theme ')) {
+                            const theme = command.split(' ')[1];
+                            if (['patriot', 'retro', 'modern'].includes(theme)) {
+                                this.addSystemMessage(`Theme changed to ${theme} mode`);
+                            } else {
+                                this.addSystemMessage('Invalid theme. Available themes: patriot, retro, modern');
+                            }
+                        } else {
+                            this.addSystemMessage(`Unknown command: ${command}`);
+                        }
+                        break;
+                }
+            }
+
             loadDemoContent() {
                 // Add initial demo messages to show Marchat functionality
                 this.addSystemMessage('=== Marchat Terminal Client v1.0 ===');
                 this.addSystemMessage('Welcome to Marchat GUI!');
-                this.addSystemMessage('Connect to a Marchat server to start chatting.');
+                this.addSystemMessage('You can type messages and commands even without connecting to a server.');
                 
                 // Add some example messages for demo
                 setTimeout(() => {
@@ -798,6 +835,9 @@
                     this.users.add('charlie');
                     this.users.add('you');
                     this.updateUserList();
+                    
+                    // Focus the input for immediate typing
+                    this.messageInput.focus();
                 }, 500);
             }
         }
