@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marchat GUI - Discord-inspired Chat Client</title>
+    <style>
+        /* Discord-inspired dark theme */
+        :root {
+            --primary: #36393f;
+            --secondary: #40444b;
+            --background: #2f3136;
+            --text: #dcddde;
+            --accent: #7289da;
+            --online: #43b581;
+            --offline: #747f8d;
+            --error: #f04747;
+            --warning: #faa61a;
+            --success: #43b581;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Roboto Mono', monospace;
+            background-color: var(--background);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar - User List */
+        .sidebar {
+            width: 240px;
+            background-color: var(--primary);
+            border-right: 1px solid var(--secondary);
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--secondary);
+            background-color: var(--secondary);
+        }
+
+        .server-info {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            gap: 6px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--offline);
+        }
+
+        .status-indicator.connected {
+            background-color: var(--online);
+        }
+
+        .status-indicator.connecting {
+            background-color: var(--warning);
+        }
+
+        .status-indicator.error {
+            background-color: var(--error);
+        }
+
+        .user-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .user-list-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--text);
+            margin-bottom: 8px;
+            padding: 0 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 2px;
+            font-size: 14px;
+            gap: 8px;
+        }
+
+        .user-item:hover {
+            background-color: var(--secondary);
+        }
+
+        .user-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--online);
+        }
+
+        /* Main Chat Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--background);
+        }
+
+        .chat-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--secondary);
+            background-color: var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .server-config {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .server-input {
+            background-color: var(--secondary);
+            border: 1px solid var(--primary);
+            color: var(--text);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            width: 200px;
+        }
+
+        .connect-btn {
+            background-color: var(--accent);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .connect-btn:hover {
+            background-color: #5865f2;
+        }
+
+        .connect-btn:disabled {
+            background-color: var(--offline);
+            cursor: not-allowed;
+        }
+
+        /* Messages Container */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+
+        .message:hover {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 2px;
+        }
+
+        .message-username {
+            font-weight: bold;
+            color: var(--accent);
+            font-size: 14px;
+        }
+
+        .message-timestamp {
+            font-size: 11px;
+            color: var(--offline);
+        }
+
+        .message-content {
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+
+        .system-message {
+            color: var(--warning);
+            font-style: italic;
+            text-align: center;
+            padding: 4px;
+        }
+
+        .error-message {
+            color: var(--error);
+            font-style: italic;
+            text-align: center;
+            padding: 4px;
+        }
+
+        /* Message Input */
+        .message-input-container {
+            padding: 16px;
+            border-top: 1px solid var(--secondary);
+            background-color: var(--primary);
+        }
+
+        .message-input {
+            width: 100%;
+            background-color: var(--secondary);
+            border: 1px solid var(--primary);
+            color: var(--text);
+            padding: 12px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .message-input::placeholder {
+            color: var(--offline);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 30vh;
+                order: 2;
+            }
+
+            .main-content {
+                order: 1;
+                height: 70vh;
+            }
+
+            .server-config {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .server-input {
+                width: 150px;
+            }
+
+            .chat-header {
+                flex-direction: column;
+                gap: 8px;
+                align-items: flex-start;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--secondary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar with user list -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="server-info">Marchat Server</div>
+                <div class="connection-status">
+                    <div class="status-indicator" id="statusIndicator"></div>
+                    <span id="connectionStatus">Disconnected</span>
+                </div>
+            </div>
+            <div class="user-list">
+                <div class="user-list-title">Online Users</div>
+                <div id="userList">
+                    <!-- Users will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Main chat area -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="chat-title"># general</div>
+                <div class="server-config">
+                    <input 
+                        type="text" 
+                        id="serverInput" 
+                        class="server-input" 
+                        placeholder="ws://localhost:8080/ws"
+                        value="ws://localhost:8080/ws"
+                    >
+                    <button id="connectBtn" class="connect-btn">Connect</button>
+                </div>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <!-- Messages will be populated here -->
+            </div>
+
+            <div class="message-input-container">
+                <textarea 
+                    id="messageInput" 
+                    class="message-input" 
+                    placeholder="Type a message... (Use :command for commands)"
+                    rows="1"
+                    disabled
+                ></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class MarchatClient {
+            constructor() {
+                this.socket = null;
+                this.connected = false;
+                this.users = new Set();
+                this.username = null;
+                
+                this.initializeElements();
+                this.bindEvents();
+                this.loadServerUrl();
+            }
+
+            initializeElements() {
+                this.serverInput = document.getElementById('serverInput');
+                this.connectBtn = document.getElementById('connectBtn');
+                this.statusIndicator = document.getElementById('statusIndicator');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.messagesContainer = document.getElementById('messagesContainer');
+                this.messageInput = document.getElementById('messageInput');
+                this.userList = document.getElementById('userList');
+            }
+
+            bindEvents() {
+                this.connectBtn.addEventListener('click', () => {
+                    if (this.connected) {
+                        this.disconnect();
+                    } else {
+                        this.connect();
+                    }
+                });
+
+                this.messageInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                this.messageInput.addEventListener('input', () => {
+                    this.autoResizeTextarea();
+                });
+
+                // Store server URL on change
+                this.serverInput.addEventListener('input', () => {
+                    localStorage.setItem('marchat_server_url', this.serverInput.value);
+                });
+            }
+
+            loadServerUrl() {
+                const savedUrl = localStorage.getItem('marchat_server_url');
+                if (savedUrl) {
+                    this.serverInput.value = savedUrl;
+                }
+            }
+
+            connect() {
+                const serverUrl = this.serverInput.value.trim();
+                if (!serverUrl) {
+                    this.addSystemMessage('Please enter a server URL');
+                    return;
+                }
+
+                this.updateConnectionStatus('connecting', 'Connecting...');
+                this.connectBtn.disabled = true;
+
+                try {
+                    this.socket = new WebSocket(serverUrl);
+
+                    this.socket.onopen = () => {
+                        this.connected = true;
+                        this.updateConnectionStatus('connected', 'Connected');
+                        this.connectBtn.textContent = 'Disconnect';
+                        this.connectBtn.disabled = false;
+                        this.messageInput.disabled = false;
+                        this.messageInput.focus();
+                        this.addSystemMessage('Connected to marchat server');
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        this.handleMessage(event.data);
+                    };
+
+                    this.socket.onclose = () => {
+                        this.handleDisconnection();
+                    };
+
+                    this.socket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.addErrorMessage('Connection error occurred');
+                        this.handleDisconnection();
+                    };
+
+                } catch (error) {
+                    console.error('Failed to create WebSocket connection:', error);
+                    this.addErrorMessage('Failed to connect to server');
+                    this.handleDisconnection();
+                }
+            }
+
+            disconnect() {
+                if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                    this.socket.close();
+                }
+                this.handleDisconnection();
+            }
+
+            handleDisconnection() {
+                this.connected = false;
+                this.socket = null;
+                this.users.clear();
+                this.updateConnectionStatus('error', 'Disconnected');
+                this.connectBtn.textContent = 'Connect';
+                this.connectBtn.disabled = false;
+                this.messageInput.disabled = true;
+                this.updateUserList();
+                this.addSystemMessage('Disconnected from server');
+            }
+
+            handleMessage(data) {
+                try {
+                    const message = JSON.parse(data);
+                    
+                    switch (message.type) {
+                        case 'message':
+                            this.addChatMessage(message.username, message.content, message.timestamp);
+                            break;
+                        case 'user_joined':
+                            this.users.add(message.username);
+                            this.updateUserList();
+                            this.addSystemMessage(`${message.username} joined the chat`);
+                            break;
+                        case 'user_left':
+                            this.users.delete(message.username);
+                            this.updateUserList();
+                            this.addSystemMessage(`${message.username} left the chat`);
+                            break;
+                        case 'user_list':
+                            this.users = new Set(message.users);
+                            this.updateUserList();
+                            break;
+                        case 'welcome':
+                            this.username = message.username;
+                            this.addSystemMessage(`Welcome, ${message.username}!`);
+                            break;
+                        case 'command_response':
+                            this.addSystemMessage(message.content);
+                            break;
+                        case 'error':
+                            this.addErrorMessage(message.content);
+                            break;
+                        default:
+                            console.log('Unknown message type:', message.type);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse message:', error);
+                    this.addErrorMessage('Received invalid message from server');
+                }
+            }
+
+            sendMessage() {
+                const content = this.messageInput.value.trim();
+                if (!content || !this.connected || this.socket.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+
+                try {
+                    // Check if it's a command (starts with :)
+                    if (content.startsWith(':')) {
+                        const command = content.substring(1);
+                        this.socket.send(JSON.stringify({
+                            type: 'command',
+                            command: command
+                        }));
+                    } else {
+                        this.socket.send(JSON.stringify({
+                            type: 'message',
+                            content: content
+                        }));
+                    }
+
+                    this.messageInput.value = '';
+                    this.autoResizeTextarea();
+                } catch (error) {
+                    console.error('Failed to send message:', error);
+                    this.addErrorMessage('Failed to send message');
+                }
+            }
+
+            addChatMessage(username, content, timestamp) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message';
+
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'message-header';
+
+                const usernameSpan = document.createElement('span');
+                usernameSpan.className = 'message-username';
+                usernameSpan.textContent = username;
+
+                const timestampSpan = document.createElement('span');
+                timestampSpan.className = 'message-timestamp';
+                timestampSpan.textContent = this.formatTimestamp(timestamp);
+
+                headerDiv.appendChild(usernameSpan);
+                headerDiv.appendChild(timestampSpan);
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.textContent = content;
+
+                messageDiv.appendChild(headerDiv);
+                messageDiv.appendChild(contentDiv);
+
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            addSystemMessage(content) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'system-message';
+                messageDiv.textContent = content;
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            addErrorMessage(content) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'error-message';
+                messageDiv.textContent = content;
+                this.messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            updateConnectionStatus(status, text) {
+                this.statusIndicator.className = `status-indicator ${status}`;
+                this.connectionStatus.textContent = text;
+            }
+
+            updateUserList() {
+                this.userList.innerHTML = '';
+                
+                if (this.users.size === 0) {
+                    const emptyDiv = document.createElement('div');
+                    emptyDiv.style.color = 'var(--offline)';
+                    emptyDiv.style.fontSize = '12px';
+                    emptyDiv.style.padding = '8px';
+                    emptyDiv.style.textAlign = 'center';
+                    emptyDiv.textContent = 'No users online';
+                    this.userList.appendChild(emptyDiv);
+                    return;
+                }
+
+                Array.from(this.users).sort().forEach(username => {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'user-item';
+
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'user-status';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = username;
+
+                    userDiv.appendChild(statusDiv);
+                    userDiv.appendChild(nameSpan);
+                    this.userList.appendChild(userDiv);
+                });
+            }
+
+            formatTimestamp(timestamp) {
+                if (!timestamp) {
+                    timestamp = Date.now();
+                }
+                
+                const date = new Date(timestamp);
+                const now = new Date();
+                const isToday = date.toDateString() === now.toDateString();
+                
+                if (isToday) {
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else {
+                    return date.toLocaleString([], { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                }
+            }
+
+            autoResizeTextarea() {
+                const textarea = this.messageInput;
+                textarea.style.height = 'auto';
+                const maxHeight = 120; // Max height in pixels
+                const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+                textarea.style.height = newHeight + 'px';
+            }
+
+            scrollToBottom() {
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
+        }
+
+        // Initialize the application when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.marchatClient = new MarchatClient();
+            
+            // Add some helpful initial messages
+            window.marchatClient.addSystemMessage('Welcome to Marchat GUI!');
+            window.marchatClient.addSystemMessage('Enter a server URL and click Connect to start chatting.');
+            window.marchatClient.addSystemMessage('Commands start with : (e.g., :theme patriot)');
+        });
+    </script>
+</body>
+</html>
