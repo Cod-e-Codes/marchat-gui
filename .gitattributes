@@ -1,0 +1,17 @@
+# Default: normalized line endings
+* text=auto eol=lf
+
+# Go source and modules
+*.go text eol=lf diff=go
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Declared binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary

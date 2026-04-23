@@ -1,192 +1,137 @@
 # marchat GUI Client
 
-<img src="marchat-gui.jpg" alt="marchat GUI Client Screenshot" width="600">
-
-Cross-platform desktop client for marchat chat server with real-time messaging, file sharing, and end-to-end encryption support.
+Cross-platform desktop client for the [marchat](https://github.com/Cod-e-Codes/marchat) chat server: WebSocket chat, file sharing, optional E2E encryption, and admin tools. Theme ids match the Flutter app and TUI: `system`, `patriot`, `retro`, and `modern`.
 
 ## Features
 
-- Real-time WebSocket-based messaging
+- Real-time WebSocket messaging (same protocol as `PROTOCOL.md` in the server repo)
 - File sharing with configurable size limits
-- End-to-end encryption with keystore management
-- Multiple UI themes (light, dark, system)
-- Admin functionality for user and database management
-- Cross-platform support (Windows, macOS, Linux)
-- 12/24 hour time format options
-- Audio notifications with mention filtering
-- Markdown support for code snippets
-- Auto-reconnection with exponential backoff
+- End-to-end encryption with the shared marchat keystore
+- Window themes aligned with Flutter: `system`, `patriot`, `retro`, `modern` (Fyne maps these to light/dark/default)
+- Optional admin features when connected with a valid admin key
+- 12/24 hour time display
+- Audio notification options (with mention-only mode)
+- Code snippets via markdown code fences
+- Auto-reconnect with exponential backoff
+- Persists settings to the same `config.json` as other marchat clients (`GetConfigPath` in `client/config`)
 
 ## Requirements
 
-- Go 1.23 or later
-- Compatible marchat server instance
+- Go 1.25.9 or later (aligned with the main [marchat](https://github.com/Cod-e-Codes/marchat) module)
+- A running marchat server (see the server repo [QUICKSTART.md](https://github.com/Cod-e-Codes/marchat/blob/main/QUICKSTART.md))
 
 ## Dependencies
 
-- [Fyne v2](https://fyne.io/) - GUI framework
-- [Gorilla WebSocket](https://github.com/gorilla/websocket) - WebSocket client
-- marchat/client/config - Configuration management
-- marchat/client/crypto - Encryption support
-- marchat/shared - Shared data structures
+- [Fyne v2](https://fyne.io/) (GUI)
+- [Gorilla WebSocket](https://github.com/gorilla/websocket)
+- [github.com/Cod-e-Codes/marchat](https://github.com/Cod-e-Codes/marchat) (`client/config`, `client/crypto`, `shared`)
 
 ## Installation
 
 ```bash
-go build -o marchat-gui main.go
+go build -o marchat-gui .
 ```
 
 ## Configuration
 
-### Interactive Setup
+### Interactive setup
 
-Run without arguments to open the configuration dialog:
+Run with no arguments to open the connection form:
 
 ```bash
 ./marchat-gui
 ```
 
-### Configuration Options
+On first launch, the form is pre-filled from the standard marchat client `config.json` if it already exists (same as the TUI).
 
-- **Username**: Display name for chat
-- **Server URL**: WebSocket server endpoint (default: ws://localhost:8080/ws)
-- **Admin Access**: Enable admin privileges with key
-- **End-to-End Encryption**: Enable with keystore passphrase
-- **Global E2E Key**: Set via MARCHAT_GLOBAL_E2E_KEY environment variable
-- **Theme**: system, light, or dark
+### Configuration options
 
-### Keystore Location
+- **Username** (required)
+- **Server URL** (default `ws://localhost:8080/ws`)
+- **Admin** (optional) with **Admin key** when the server requires it
+- **E2E** (optional) with keystore **passphrase** and optional **global E2E key** field (sets `MARCHAT_GLOBAL_E2E_KEY` in-process; see the main repo docs for key distribution)
+- **Theme** (`system` | `patriot` | `retro` | `modern`)
 
-Keystores are stored following OS conventions:
-- **Linux/macOS**: `~/.config/marchat/keystore.dat`
-- **Windows**: `%APPDATA%\marchat\keystore.dat`
+### Keystore location
+
+Uses the same resolution as the official client (`config.GetKeystorePath()`): typically `keystore.dat` under the marchat config directory (for example `%APPDATA%\\marchat` on Windows).
 
 ## Usage
 
-### Chat Commands
+### Chat commands
 
 ```
 :clear              Clear chat history
 :time               Toggle 12/24h time format
 :bell               Toggle notification sounds
 :bell-mention       Toggle mention-only notifications
-:code               Create code snippet dialog
-:sendfile [path]    Send file to chat
-:savefile <name>    Save received file
-:theme <name>       Change theme
+:code               Open code snippet dialog
+:sendfile [path]    Send a file
+:savefile <name>    Save a received file
+:theme <name>       Set theme: system, patriot, retro, modern, or legacy light / dark
 ```
 
-### Admin Commands
+### Admin commands
 
 ```
 :cleardb            Clear message database
 :backup             Backup database
 :stats              Show database statistics
-:kick <user>        Kick user from chat
-:ban <user>         Ban user permanently
-:unban <user>       Remove user ban
-:allow <user>       Override kick/ban
-:forcedisconnect <user>  Force disconnect user
+:kick <user>        Kick a user
+:ban <user>         Ban a user
+:unban <user>       Remove a ban
+:allow <user>       Allow a user (override kick)
+:forcedisconnect <user>  Force disconnect
 ```
 
-### File Sharing
+### File size limits
 
-File size limits are configured via environment variables:
-- `MARCHAT_MAX_FILE_BYTES`: Maximum file size in bytes
-- `MARCHAT_MAX_FILE_MB`: Maximum file size in megabytes
+Same as the server and other clients, via environment (evaluated in this client for outbound files):
 
-Default limit is 1MB.
+- `MARCHAT_MAX_FILE_BYTES` (takes precedence)
+- `MARCHAT_MAX_FILE_MB` if bytes not set
 
-### Menu Navigation
-
-**File Menu**
-- Send File: Open file picker
-- Save Received File: Save files from chat
-- Quit: Close application
-
-**Edit Menu**
-- Clear Chat: Remove message history
-- Code Snippet: Create formatted code blocks
-
-**View Menu**
-- Toggle Time Format: Switch time display
-- Theme Selection: Change appearance
-
-**Audio Menu**
-- Toggle Bell: Enable/disable notifications
-- Toggle Bell on Mention Only: Filter notifications
+Default cap is 1MB when neither is set.
 
 ## Encryption
 
-The client supports end-to-end encryption when properly configured:
+1. Enable E2E in the form and provide the keystore passphrase.  
+2. Set the global key through the form or `MARCHAT_GLOBAL_E2E_KEY` in the environment before starting the app, per the main repo.  
+3. Keystore files are compatible with the TUI and other official clients.
 
-1. Enable encryption in configuration dialog
-2. Provide keystore passphrase
-3. Set global encryption key via environment variable
-4. Existing keystores from CLI client are compatible
+## Admin features
 
-## Admin Features
+Admins on the allowlist, with a valid key, can use the Admin menu, user list selection, and `:`-prefixed admin commands as in the main client.
 
-Admin users can:
-- View and manage connected users
-- Execute database operations
-- Kick, ban, or force disconnect users
-- Access server statistics
-- Perform database backups
+## Keyboard notes
 
-Admin selection in user list enables context actions.
-
-## Keyboard Shortcuts
-
-- **Enter**: Send message
-- **Ctrl+Enter**: New line in message entry
+- **Enter** (implementation varies by platform): use the Send button or the menu if Enter inserts a newline instead of sending.
+- For multiline input, your OS/Fyne key bindings apply.
 
 ## Logging
 
-Debug logs are written to `marchat-gui-debug.log` in the working directory.
+Debug logs append to `marchat-gui-debug.log` in the working directory.
 
-## Environment Variables
+## Environment variables
 
-```bash
-MARCHAT_GLOBAL_E2E_KEY    # Global encryption key (base64)
-MARCHAT_MAX_FILE_BYTES    # File size limit in bytes
-MARCHAT_MAX_FILE_MB       # File size limit in megabytes
-```
+| Variable | Purpose |
+|----------|--------|
+| `MARCHAT_GLOBAL_E2E_KEY` | Global E2E key material (base64), same as other clients |
+| `MARCHAT_MAX_FILE_BYTES` / `MARCHAT_MAX_FILE_MB` | Outgoing file size limits |
+| `MARCHAT_CONFIG_DIR` | Override the config directory (same as TUI) |
 
-## Connection Handling
+## Connection behavior
 
-- Automatic reconnection on connection loss
-- Exponential backoff with maximum 30-second delay
-- WebSocket ping/pong for connection health
-- TLS verification disabled by default for development
+- Pings, reconnect with backoff (max 30s)
+- In development, TLS verify may be disabled in the dialer; use `wss://` with a proper cert for production
+- On each successful connect, the transcript is cleared so the server’s history replay stays authoritative (see `PROTOCOL.md`)
 
-## Build Options
-
-For production builds, consider:
+## Build (smaller binary)
 
 ```bash
-go build -ldflags="-s -w" -o marchat-gui main.go
+go build -ldflags="-s -w" -o marchat-gui .
 ```
-
-## Troubleshooting
-
-**Connection Issues**
-- Verify server URL and accessibility
-- Check firewall settings
-- Review debug logs
-
-**Encryption Problems**
-- Confirm keystore passphrase
-- Verify MARCHAT_GLOBAL_E2E_KEY environment variable
-- Check keystore file permissions
-
-**File Transfer Failures**
-- Verify file size limits
-- Check file permissions
-- Ensure sufficient disk space
 
 ## License
 
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

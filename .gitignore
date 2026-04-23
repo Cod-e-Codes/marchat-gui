@@ -1,0 +1,86 @@
+# Build outputs (Fyne / Go; keep source tracked)
+/marchat-gui
+/marchat-gui.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.o
+*.a
+
+# Fyne package / mobile targets
+*.apk
+*.aab
+*.ipa
+*.app
+fyne_metadata.json
+fyne.lock
+
+# Common local build and package dirs
+bin/
+build/
+dist/
+out/
+packaging-out/
+
+# Go workspace (local replace / multi-module)
+go.work
+go.work.sum
+
+# Vendored deps (not used by default; ignore if you vendor)
+vendor/
+
+# Test and profiling
+*.out
+coverage
+coverage.html
+profile.cov
+cpuprofile
+memprofile
+*.pprof
+cpu.prof
+mem.prof
+
+# App debug log (see main.go)
+marchat-gui-debug.log
+*.log
+
+# User config and secrets (if copied into repo or created locally for testing)
+config.json
+keystore.dat
+*.keystore
+.env
+.env.*
+!.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-*
+
+# Cursor
+.cursor/
+.cursorrules
+
+# Scratch
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Archives from local packaging
+*.nupkg
+*.zip
+*.tar.gz
+*.tgz

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -36,6 +37,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func capitalizeASCII(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 const (
 	maxMessages         = 100
 	maxUsersDisplay     = 20
@@ -63,28 +71,6 @@ func init() {
 	} else {
 		log.SetOutput(os.Stderr)
 	}
-}
-
-// getKeystorePath returns the standard keystore path following OS conventions
-func getKeystorePath() string {
-	// Get the user's config directory following OS conventions
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		// Fallback to a reasonable default
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-		if runtime.GOOS == "windows" {
-			configDir = filepath.Join(os.Getenv("APPDATA"))
-		}
-	}
-
-	// Create marchat subdirectory
-	marchatDir := filepath.Join(configDir, "marchat")
-
-	// Ensure the directory exists
-	os.MkdirAll(marchatDir, 0700)
-
-	// Return the keystore file path
-	return filepath.Join(marchatDir, "keystore.dat")
 }
 
 // MarchatGUI represents the main GUI application
@@ -152,8 +138,8 @@ func NewMarchatGUI(cfg *config.Config, keystore *crypto.KeyStore, isAdmin bool, 
 	}
 	log.Printf("Created Fyne app")
 
-	// Set theme safely
-	themeName := "system" // default
+	// Set theme safely (ids align with Flutter / TUI: system, patriot, retro, modern)
+	themeName := "modern"
 	if cfg != nil && cfg.Theme != "" {
 		themeName = cfg.Theme
 	}
@@ -190,8 +176,8 @@ func NewMarchatGUI(cfg *config.Config, keystore *crypto.KeyStore, isAdmin bool, 
 		reconnectDelay:    time.Second,
 		selectedUserIndex: -1,
 		twentyFourHour:    cfg != nil && cfg.TwentyFourHour,
-		bellEnabled:       true,  // Default to true
-		bellOnMention:     false, // Default to false
+		bellEnabled:       cfg == nil || cfg.EnableBell,
+		bellOnMention:     cfg != nil && cfg.BellOnMention,
 		minBellInterval:   500 * time.Millisecond,
 	}
 
@@ -212,7 +198,7 @@ func NewMarchatGUIWithApp(fyneApp fyne.App, cfg *config.Config, keystore *crypto
 	log.Printf("Creating GUI instance with existing app...")
 
 	// Set theme safely
-	themeName := "system" // default
+	themeName := "modern"
 	if cfg != nil && cfg.Theme != "" {
 		themeName = cfg.Theme
 	}
@@ -249,8 +235,8 @@ func NewMarchatGUIWithApp(fyneApp fyne.App, cfg *config.Config, keystore *crypto
 		reconnectDelay:    time.Second,
 		selectedUserIndex: -1,
 		twentyFourHour:    cfg != nil && cfg.TwentyFourHour,
-		bellEnabled:       true,  // Default to true
-		bellOnMention:     false, // Default to false
+		bellEnabled:       cfg == nil || cfg.EnableBell,
+		bellOnMention:     cfg != nil && cfg.BellOnMention,
 		minBellInterval:   500 * time.Millisecond,
 	}
 
@@ -271,7 +257,7 @@ func NewMarchatGUIWithWindow(fyneApp fyne.App, window fyne.Window, cfg *config.C
 	log.Printf("Creating GUI instance with existing window...")
 
 	// Set theme safely
-	themeName := "system" // default
+	themeName := "modern"
 	if cfg != nil && cfg.Theme != "" {
 		themeName = cfg.Theme
 	}
@@ -304,8 +290,8 @@ func NewMarchatGUIWithWindow(fyneApp fyne.App, window fyne.Window, cfg *config.C
 		reconnectDelay:    time.Second,
 		selectedUserIndex: -1,
 		twentyFourHour:    cfg != nil && cfg.TwentyFourHour,
-		bellEnabled:       true,  // Default to true
-		bellOnMention:     false, // Default to false
+		bellEnabled:       cfg == nil || cfg.EnableBell,
+		bellOnMention:     cfg != nil && cfg.BellOnMention,
 		minBellInterval:   500 * time.Millisecond,
 	}
 
@@ -322,13 +308,15 @@ func NewMarchatGUIWithWindow(fyneApp fyne.App, window fyne.Window, cfg *config.C
 	return gui
 }
 
-// getThemeFromConfig converts config theme to Fyne theme
+// getThemeFromConfig maps marchat theme ids (same as Flutter / TUI) to Fyne themes.
 func getThemeFromConfig(themeName string) fyne.Theme {
-	switch strings.ToLower(themeName) {
-	case "dark", "modern", "retro":
-		return theme.DarkTheme()
-	case "light", "system":
+	switch strings.ToLower(strings.TrimSpace(themeName)) {
+	case "light":
 		return theme.LightTheme()
+	case "system":
+		return theme.DefaultTheme()
+	case "patriot", "retro", "modern", "dark":
+		return theme.DarkTheme()
 	default:
 		return theme.DefaultTheme()
 	}
@@ -549,7 +537,7 @@ func (gui *MarchatGUI) createScrollMessageWidget(sender, content string, timesta
 
 	var processedContent string
 	if msgType == shared.FileMessageType && file != nil {
-		processedContent = fmt.Sprintf("📎 File: %s (%d bytes)\n\nUse File → Save Received File to save",
+		processedContent = fmt.Sprintf("File: %s (%d bytes)\n\nUse File > Save Received File to save",
 			file.Filename, file.Size)
 	} else {
 		processedContent = gui.processMessageContent(content, sender)
@@ -598,7 +586,7 @@ func (gui *MarchatGUI) updateMessageWidget(obj fyne.CanvasObject, sender, conten
 	// Update content
 	var processedContent string
 	if msgType == shared.FileMessageType && file != nil {
-		processedContent = fmt.Sprintf("📎 **File:** %s (%d bytes)\n\n*Use File → Save Received File to save*",
+		processedContent = fmt.Sprintf("**File:** %s (%d bytes)\n\n*Use File > Save Received File to save*",
 			file.Filename, file.Size)
 	} else {
 		processedContent = gui.processMessageContent(content, sender)
@@ -615,18 +603,6 @@ func (gui *MarchatGUI) updateMessageWidget(obj fyne.CanvasObject, sender, conten
 
 // processMessageContent processes message content for mentions, URLs, code blocks, etc.
 func (gui *MarchatGUI) processMessageContent(content, sender string) string {
-	// Convert basic emojis
-	emojis := map[string]string{
-		":)": "😊",
-		":(": "🙁",
-		":D": "😃",
-		"<3": "❤️",
-		":P": "😛",
-	}
-	for k, v := range emojis {
-		content = strings.ReplaceAll(content, k, v)
-	}
-
 	// Process code blocks (simplified for markdown)
 	codeBlockRegex := regexp.MustCompile("```([a-zA-Z0-9+]*)\n([\\s\\S]*?)```")
 	content = codeBlockRegex.ReplaceAllString(content, "```\n$2\n```")
@@ -669,13 +645,14 @@ func (gui *MarchatGUI) setupMenus() {
 		fyne.NewMenuItem("Code Snippet", gui.showCodeSnippetDialog),
 	)
 
-	// View menu
+	// View menu (theme ids match Flutter and TUI)
 	viewMenu := fyne.NewMenu("View",
 		fyne.NewMenuItem("Toggle Time Format", gui.toggleTimeFormat),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Light Theme", func() { gui.setTheme("light") }),
-		fyne.NewMenuItem("Dark Theme", func() { gui.setTheme("dark") }),
-		fyne.NewMenuItem("System Theme", func() { gui.setTheme("system") }),
+		fyne.NewMenuItem("Theme: system", func() { gui.setTheme("system") }),
+		fyne.NewMenuItem("Theme: patriot", func() { gui.setTheme("patriot") }),
+		fyne.NewMenuItem("Theme: retro", func() { gui.setTheme("retro") }),
+		fyne.NewMenuItem("Theme: modern", func() { gui.setTheme("modern") }),
 	)
 
 	// Audio menu
@@ -757,9 +734,21 @@ func (gui *MarchatGUI) Connect() error {
 		return err
 	}
 
+	// Clear local transcript so server history replay is the single source of truth (see PROTOCOL.md).
+	gui.mu.Lock()
+	gui.messages = nil
+	gui.receivedFiles = make(map[string]*shared.FileMeta)
+	gui.mu.Unlock()
+	fyne.Do(func() {
+		if gui.messageContainer != nil {
+			gui.messageContainer.RemoveAll()
+			gui.messageContainer.Refresh()
+		}
+	})
+
 	gui.conn = conn
 	gui.connected = true
-	gui.updateStatus("✅ Connected to server!")
+	gui.updateStatus("Connected to server.")
 	gui.ctx, gui.cancel = context.WithCancel(context.Background())
 
 	// Send handshake
@@ -992,13 +981,13 @@ func (gui *MarchatGUI) handleSpecialMessage(ws struct {
 // handleConnectionError handles connection errors and reconnection
 func (gui *MarchatGUI) handleConnectionError(err error) {
 	gui.connected = false
-	gui.updateStatus("🚫 Connection lost. Reconnecting...")
+	gui.updateStatus("Connection lost. Reconnecting...")
 	gui.closeConnection()
 
 	// Check for username errors
 	if strings.Contains(err.Error(), "Username already taken") ||
 		strings.Contains(err.Error(), "already taken") {
-		gui.updateStatus("❌ Username already taken - please restart with a different username")
+		gui.updateStatus("Username already taken; restart with a different username.")
 		return
 	}
 
@@ -1091,7 +1080,7 @@ func (gui *MarchatGUI) sendMessage(text string) {
 	}
 
 	if !gui.connected || gui.conn == nil {
-		gui.updateStatus("❌ Not connected")
+		gui.updateStatus("Not connected")
 		return
 	}
 
@@ -1172,10 +1161,11 @@ func (gui *MarchatGUI) sendPlainMessage(text string) {
 		Sender:    username,
 		Content:   text,
 		CreatedAt: time.Now(),
+		Type:      shared.TextMessage,
 	}
 
 	if err := gui.conn.WriteJSON(msg); err != nil {
-		gui.updateStatus("❌ Failed to send message")
+		gui.updateStatus("Failed to send message")
 		log.Printf("Failed to send message: %v", err)
 	}
 	gui.setSending(false)
@@ -1185,7 +1175,7 @@ func (gui *MarchatGUI) sendPlainMessage(text string) {
 func (gui *MarchatGUI) sendEncryptedMessage(text string) {
 	if gui.keystore == nil {
 		log.Printf("No keystore available for encryption")
-		gui.updateStatus("❌ Encryption not available")
+		gui.updateStatus("Encryption not available")
 		gui.setSending(false)
 		return
 	}
@@ -1195,7 +1185,7 @@ func (gui *MarchatGUI) sendEncryptedMessage(text string) {
 	globalKey := gui.keystore.GetSessionKey("global")
 	if globalKey == nil {
 		log.Printf("No global key available for encryption")
-		gui.updateStatus("❌ No global key available for encryption")
+		gui.updateStatus("No global key available for encryption")
 		gui.setSending(false)
 		return
 	}
@@ -1210,7 +1200,7 @@ func (gui *MarchatGUI) sendEncryptedMessage(text string) {
 	encryptedMsg, err := gui.keystore.EncryptMessage(username, text, conversationID)
 	if err != nil {
 		log.Printf("Encryption failed: %v", err)
-		gui.updateStatus(fmt.Sprintf("❌ Encryption failed: %v", err))
+		gui.updateStatus(fmt.Sprintf("Encryption failed: %v", err))
 		gui.setSending(false)
 		return
 	}
@@ -1232,10 +1222,11 @@ func (gui *MarchatGUI) sendEncryptedMessage(text string) {
 		Sender:    username,
 		CreatedAt: time.Now(),
 		Type:      shared.TextMessage,
+		Encrypted: true,
 	}
 
 	if err := gui.conn.WriteJSON(msg); err != nil {
-		gui.updateStatus("❌ Failed to send encrypted message")
+		gui.updateStatus("Failed to send encrypted message")
 		log.Printf("Failed to send encrypted message: %v", err)
 	}
 	gui.setSending(false)
@@ -1244,7 +1235,7 @@ func (gui *MarchatGUI) sendEncryptedMessage(text string) {
 // sendAdminCommand sends admin commands
 func (gui *MarchatGUI) sendAdminCommand(text string) {
 	if !gui.isAdmin {
-		gui.updateStatus("❌ Admin privileges required")
+		gui.updateStatus("Admin privileges required")
 		return
 	}
 
@@ -1259,22 +1250,22 @@ func (gui *MarchatGUI) sendAdminCommand(text string) {
 	}
 
 	if err := gui.conn.WriteJSON(msg); err != nil {
-		gui.updateStatus("❌ Failed to send admin command")
+		gui.updateStatus("Failed to send admin command")
 	} else {
-		gui.updateStatus("✅ Admin command sent")
+		gui.updateStatus("Admin command sent")
 	}
 }
 
 // sendFile sends a file
 func (gui *MarchatGUI) sendFile(filePath string) {
 	if !gui.connected || gui.conn == nil {
-		gui.updateStatus("❌ Not connected")
+		gui.updateStatus("Not connected")
 		return
 	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		gui.updateStatus("❌ Failed to read file: " + err.Error())
+		gui.updateStatus("Failed to read file: " + err.Error())
 		return
 	}
 
@@ -1295,7 +1286,7 @@ func (gui *MarchatGUI) sendFile(filePath string) {
 		if maxBytes%(1024*1024) == 0 {
 			limitMsg = fmt.Sprintf("%dMB", maxBytes/(1024*1024))
 		}
-		gui.updateStatus("❌ File too large (max " + limitMsg + ")")
+		gui.updateStatus("File too large (max " + limitMsg + ")")
 		return
 	}
 
@@ -1316,9 +1307,9 @@ func (gui *MarchatGUI) sendFile(filePath string) {
 	}
 
 	if err := gui.conn.WriteJSON(msg); err != nil {
-		gui.updateStatus("❌ Failed to send file")
+		gui.updateStatus("Failed to send file")
 	} else {
-		gui.updateStatus("✅ File sent: " + filename)
+		gui.updateStatus("File sent: " + filename)
 	}
 }
 
@@ -1329,7 +1320,7 @@ func (gui *MarchatGUI) saveFile(filename string) {
 	gui.mu.RUnlock()
 
 	if !exists {
-		gui.updateStatus("❌ File not found: " + filename)
+		gui.updateStatus("File not found: " + filename)
 		return
 	}
 
@@ -1342,9 +1333,9 @@ func (gui *MarchatGUI) saveFile(filename string) {
 			defer writer.Close()
 
 			if _, err := writer.Write(file.Data); err != nil {
-				gui.updateStatus("❌ Failed to save file: " + err.Error())
+				gui.updateStatus("Failed to save file: " + err.Error())
 			} else {
-				gui.updateStatus("✅ File saved: " + writer.URI().Name())
+				gui.updateStatus("File saved: " + writer.URI().Name())
 			}
 		},
 		gui.window,
@@ -1493,8 +1484,25 @@ func (gui *MarchatGUI) setTheme(themeName string) {
 
 // saveConfig saves the current configuration
 func (gui *MarchatGUI) saveConfig() {
-	// Simplified config saving - just log for now
-	log.Printf("Config would be saved here")
+	if gui.cfg == nil {
+		return
+	}
+	if err := config.EnsureClientConfigDir(); err != nil {
+		log.Printf("save config: %v", err)
+		return
+	}
+	path, err := config.GetConfigPath()
+	if err != nil {
+		log.Printf("save config: %v", err)
+		return
+	}
+	gui.cfg.EnableBell = gui.bellEnabled
+	gui.cfg.BellOnMention = gui.bellOnMention
+	if err := config.SaveConfig(path, *gui.cfg); err != nil {
+		log.Printf("save config: %v", err)
+	} else {
+		log.Printf("config saved to %s", path)
+	}
 }
 
 // Admin Methods
@@ -1502,7 +1510,7 @@ func (gui *MarchatGUI) saveConfig() {
 // executeAdminAction executes admin actions on selected users
 func (gui *MarchatGUI) executeAdminAction(action string) {
 	if !gui.isAdmin {
-		gui.updateStatus("❌ Admin privileges required")
+		gui.updateStatus("Admin privileges required")
 		return
 	}
 
@@ -1511,12 +1519,12 @@ func (gui *MarchatGUI) executeAdminAction(action string) {
 	gui.mu.RUnlock()
 
 	if selectedUser == "" {
-		gui.updateStatus("❌ No user selected")
+		gui.updateStatus("No user selected")
 		return
 	}
 
 	if gui.cfg != nil && selectedUser == gui.cfg.Username {
-		gui.updateStatus("❌ Cannot perform action on yourself")
+		gui.updateStatus("Cannot perform action on yourself")
 		return
 	}
 
@@ -1540,7 +1548,7 @@ func (gui *MarchatGUI) executeAdminAction(action string) {
 // promptAdminAction prompts for username for admin actions
 func (gui *MarchatGUI) promptAdminAction(action string) {
 	if !gui.isAdmin {
-		gui.updateStatus("❌ Admin privileges required")
+		gui.updateStatus("Admin privileges required")
 		return
 	}
 
@@ -1553,7 +1561,7 @@ func (gui *MarchatGUI) promptAdminAction(action string) {
 	)
 
 	dialog := dialog.NewCustomConfirm(
-		strings.Title(action)+" User",
+		capitalizeASCII(action)+" User",
 		"Execute",
 		"Cancel",
 		content,
@@ -1606,13 +1614,13 @@ func (gui *MarchatGUI) generateHelpText() string {
 - **Send File**: Send a file to the chat
 - **Save Received File**: Save a file that was sent to you
 
-### Edit Menu  
+### Edit Menu
 - **Clear Chat**: Clear the chat history
 - **Code Snippet**: Create a syntax highlighted code snippet
 
 ### View Menu
 - **Toggle Time Format**: Switch between 12h and 24h time display
-- **Themes**: Change between Light, Dark, and System themes
+- **Themes**: Built-in ids match Flutter and TUI: ` + "`" + `system` + "`" + `, ` + "`" + `patriot` + "`" + `, ` + "`" + `retro` + "`" + `, ` + "`" + `modern` + "`" + ` (and ` + "`" + `light` + "`" + ` / ` + "`" + `dark` + "`" + ` for the window chrome)
 
 ### Audio Menu
 - **Toggle Bell**: Enable/disable notification sounds
@@ -1620,13 +1628,13 @@ func (gui *MarchatGUI) generateHelpText() string {
 
 ## Chat Commands
 - ` + "`" + `:clear` + "`" + ` - Clear chat history
-- ` + "`" + `:time` + "`" + ` - Toggle 12/24h time format  
+- ` + "`" + `:time` + "`" + ` - Toggle 12/24h time format
 - ` + "`" + `:bell` + "`" + ` - Toggle notification bell
 - ` + "`" + `:bell-mention` + "`" + ` - Toggle bell only on mentions
 - ` + "`" + `:code` + "`" + ` - Create code snippet
 - ` + "`" + `:sendfile [path]` + "`" + ` - Send a file
 - ` + "`" + `:savefile <filename>` + "`" + ` - Save received file
-- ` + "`" + `:theme <name>` + "`" + ` - Change theme (light, dark, system)
+- ` + "`" + `:theme <name>` + "`" + ` - Set theme: ` + "`" + `system` + "`" + `, ` + "`" + `patriot` + "`" + `, ` + "`" + `retro` + "`" + `, ` + "`" + `modern` + "`" + `, or legacy ` + "`" + `light` + "`" + ` / ` + "`" + `dark` + "`" + `
 `
 
 	if gui.isAdmin {
@@ -1636,12 +1644,12 @@ func (gui *MarchatGUI) generateHelpText() string {
 - **User Actions**: Kick, ban, or disconnect users
 - **Unban/Allow User**: Restore user access
 
-## Admin Commands  
+## Admin Commands
 - ` + "`" + `:cleardb` + "`" + ` - Clear database
 - ` + "`" + `:backup` + "`" + ` - Backup database
 - ` + "`" + `:stats` + "`" + ` - Show database stats
 - ` + "`" + `:kick <user>` + "`" + ` - Kick user
-- ` + "`" + `:ban <user>` + "`" + ` - Ban user  
+- ` + "`" + `:ban <user>` + "`" + ` - Ban user
 - ` + "`" + `:unban <user>` + "`" + ` - Unban user
 - ` + "`" + `:allow <user>` + "`" + ` - Allow user (override kick)
 - ` + "`" + `:forcedisconnect <user>` + "`" + ` - Force disconnect user
@@ -1655,8 +1663,8 @@ func (gui *MarchatGUI) generateHelpText() string {
 func (gui *MarchatGUI) showAboutDialog() {
 	aboutText := fmt.Sprintf(`# marchat GUI Client
 
-**Version**: %s  
-**Build**: Fyne GUI Edition
+**Version**: %s
+**Build**: Fyne desktop client (uses marchat client config and shared protocol types)
 
 A secure, real-time chat client with end-to-end encryption support.
 
@@ -1664,12 +1672,12 @@ A secure, real-time chat client with end-to-end encryption support.
 - Real-time messaging
 - File sharing
 - End-to-end encryption
-- Multiple themes
+- Built-in window themes (system, patriot, retro, modern) aligned with Flutter
 - Admin capabilities
 - Cross-platform support
 
 Built with Go and Fyne.
-`, "1.0.0") // Use hardcoded version for now
+`, shared.ClientVersion)
 
 	aboutLabel := widget.NewRichTextFromMarkdown(aboutText)
 	aboutLabel.Wrapping = fyne.TextWrapWord
@@ -1801,7 +1809,7 @@ func (gui *MarchatGUI) showSaveFileDialog() {
 // showAdminDialog shows the admin database operations dialog
 func (gui *MarchatGUI) showAdminDialog() {
 	if !gui.isAdmin {
-		gui.updateStatus("❌ Admin privileges required")
+		gui.updateStatus("Admin privileges required")
 		return
 	}
 
@@ -1812,12 +1820,12 @@ func (gui *MarchatGUI) showAdminDialog() {
 
 	backupButton := widget.NewButton("Backup Database", func() {
 		gui.sendAdminCommand(":backup")
-		gui.updateStatus("✅ Database backup initiated")
+		gui.updateStatus("Database backup initiated")
 	})
 
 	statsButton := widget.NewButton("Show Statistics", func() {
 		gui.sendAdminCommand(":stats")
-		gui.updateStatus("✅ Database stats requested")
+		gui.updateStatus("Database stats requested")
 	})
 
 	content := container.NewVBox(
@@ -1855,7 +1863,7 @@ func (gui *MarchatGUI) confirmAdminAction(title, message, command string) {
 
 // showErrorDialog shows an error dialog
 func (gui *MarchatGUI) showErrorDialog(title, message string) {
-	dialog.ShowError(fmt.Errorf(message), gui.window)
+	dialog.ShowError(errors.New(message), gui.window)
 }
 
 // Run starts the GUI application
@@ -2020,8 +2028,32 @@ func showConfigDialog(fyneApp fyne.App) *MarchatGUI {
 	globalE2EKeyEntry := widget.NewPasswordEntry()
 	globalE2EKeyEntry.SetPlaceHolder("Global E2E key (MARCHAT_GLOBAL_E2E_KEY)")
 
-	themeSelect := widget.NewSelect([]string{"system", "light", "dark"}, nil)
-	themeSelect.SetSelected("system")
+	themeSelect := widget.NewSelect([]string{"system", "patriot", "retro", "modern"}, nil)
+	themeSelect.SetSelected("modern")
+
+	// Pre-fill from saved client config (same file as TUI / other clients).
+	if cfgPath, err := config.GetConfigPath(); err == nil {
+		if c, err := config.LoadConfig(cfgPath); err == nil {
+			if c.Username != "" {
+				usernameEntry.SetText(c.Username)
+			}
+			if c.ServerURL != "" {
+				serverEntry.SetText(c.ServerURL)
+			}
+			adminCheck.SetChecked(c.IsAdmin)
+			e2eCheck.SetChecked(c.UseE2E)
+			tid := strings.ToLower(strings.TrimSpace(c.Theme))
+			switch tid {
+			case "light":
+				tid = "system"
+			case "dark":
+				tid = "modern"
+			}
+			if tid == "system" || tid == "patriot" || tid == "retro" || tid == "modern" {
+				themeSelect.SetSelected(tid)
+			}
+		}
+	}
 
 	// Form
 	form := widget.NewForm(
@@ -2043,129 +2075,49 @@ func showConfigDialog(fyneApp fyne.App) *MarchatGUI {
 		}
 
 		// Create config
+		isAdmin := adminCheck.Checked
 		cfg := &config.Config{
-			Username:       usernameEntry.Text,
-			ServerURL:      serverEntry.Text,
-			Theme:          themeSelect.Selected,
-			TwentyFourHour: true,
+			Username:        usernameEntry.Text,
+			ServerURL:       serverEntry.Text,
+			Theme:           themeSelect.Selected,
+			TwentyFourHour:  true,
+			EnableBell:      true,
+			BellOnMention:   false,
+			IsAdmin:         isAdmin,
+			UseE2E:          e2eCheck.Checked,
 		}
 
 		// Set admin and E2E flags
-		isAdmin := adminCheck.Checked
 		var keystore *crypto.KeyStore
 
-		// Set the global E2E key environment variable FIRST, before any keystore operations
+		// Set the global E2E key in the process environment before keystore init (out-of-band key material).
 		if e2eCheck.Checked && globalE2EKeyEntry.Text != "" {
-			log.Printf("Setting MARCHAT_GLOBAL_E2E_KEY environment variable BEFORE any keystore operations...")
 			os.Setenv("MARCHAT_GLOBAL_E2E_KEY", globalE2EKeyEntry.Text)
-			log.Printf("Environment variable set to: %s", globalE2EKeyEntry.Text)
+			log.Printf("MARCHAT_GLOBAL_E2E_KEY set (length %d)", len(globalE2EKeyEntry.Text))
 		} else if e2eCheck.Checked {
-			log.Printf("E2E enabled but no global E2E key provided")
+			log.Printf("E2E enabled but no global E2E key field provided")
 		}
 
-		if e2eCheck.Checked {
-			log.Printf("E2E enabled - will use existing keystore file")
-
-			// Initialize keystore with passphrase
-			if e2ePassEntry.Text != "" {
-				log.Printf("Initializing keystore with passphrase...")
-				// Use the same keystore path as the TUI client
-				keystorePath := getKeystorePath()
-				log.Printf("Using keystore path: %s", keystorePath)
-
-				// Also check if there are other possible keystore locations
-				homeDir, _ := os.UserHomeDir()
-				possiblePaths := []string{
-					keystorePath,
-					filepath.Join(homeDir, ".marchat", "keystore.dat"),
-					filepath.Join(homeDir, ".config", "marchat", "keystore.dat"),
-					"./keystore.dat",
-				}
-
-				log.Printf("Checking for keystore in possible locations:")
-				for _, path := range possiblePaths {
-					if stat, err := os.Stat(path); err == nil {
-						log.Printf("  Found keystore at: %s (size: %d bytes)", path, stat.Size())
-					} else {
-						log.Printf("  Not found: %s", path)
-					}
-				}
-
-				// Check if the file exists and get its size
-				if stat, err := os.Stat(keystorePath); err == nil {
-					log.Printf("Keystore file exists, size: %d bytes", stat.Size())
-				} else {
-					log.Printf("Keystore file does not exist or error accessing: %v", err)
-				}
-
-				// Check environment variable before keystore creation
-				envKey := os.Getenv("MARCHAT_GLOBAL_E2E_KEY")
-				if envKey != "" {
-					log.Printf("Environment variable MARCHAT_GLOBAL_E2E_KEY is set (length: %d)", len(envKey))
-					log.Printf("Environment variable value: %s", envKey)
-					// Try to decode to see if it's valid base64
-					if decoded, err := base64.StdEncoding.DecodeString(envKey); err == nil {
-						log.Printf("Environment variable is valid base64, decoded length: %d bytes", len(decoded))
-					} else {
-						log.Printf("Environment variable is NOT valid base64: %v", err)
-					}
-				} else {
-					log.Printf("Environment variable MARCHAT_GLOBAL_E2E_KEY is not set")
-				}
-
-				// Create keystore AFTER setting environment variable
-				keystore = crypto.NewKeyStore(keystorePath)
-				if keystore != nil {
-					log.Printf("Keystore created successfully")
-
-					// Always use Initialize() first - it handles both new and existing keystores
-					// and properly processes the environment variable
-					log.Printf("Initializing keystore...")
-					err := keystore.Initialize(e2ePassEntry.Text)
-					if err != nil {
-						log.Printf("Initialize failed: %v", err)
-						keystore = nil
-					} else {
-						log.Printf("Keystore initialized successfully")
-
-						// Check environment variable again after initialization
-						envKeyAfter := os.Getenv("MARCHAT_GLOBAL_E2E_KEY")
-						if envKeyAfter != "" {
-							log.Printf("Environment variable still set after initialization (length: %d)", len(envKeyAfter))
-						} else {
-							log.Printf("Environment variable is NOT set after initialization!")
-						}
-
-						// Verify the global key is available
-						testGlobalKey := keystore.GetSessionKey("global")
-						if testGlobalKey != nil {
-							log.Printf("Global key available via GetSessionKey: KeyID=%s", testGlobalKey.KeyID)
-						} else {
-							log.Printf("WARNING: Global key is nil via GetSessionKey after initialization!")
-							log.Printf("Keystore instance after init: %p", keystore)
-
-							// WORKAROUND: The crypto package is not processing the environment variable correctly
-							// This suggests there's a bug in the crypto package's initializeGlobalKey method
-							log.Printf("CRYPTO PACKAGE BUG: initializeGlobalKey() is not working properly")
-							log.Printf("The environment variable is set but the global key is not being created")
-							log.Printf("This is likely a bug in the crypto package that needs to be fixed")
-
-							// For now, we'll keep the keystore but it won't be able to decrypt messages
-							// The user will need to either:
-							// 1. Use the TUI client which works correctly
-							// 2. Wait for the crypto package bug to be fixed
-							// 3. Use a different keystore implementation
-
-							// Don't set keystore to nil - let it try to work anyway
-							log.Printf("Keeping keystore instance for debugging - it may still work")
-						}
-					}
-				} else {
-					log.Printf("Failed to create keystore")
-				}
-			} else {
-				log.Printf("E2E enabled but no passphrase provided")
+		if e2eCheck.Checked && e2ePassEntry.Text != "" {
+			keystorePath, kerr := config.GetKeystorePath()
+			if kerr != nil {
+				log.Printf("keystore path: %v", kerr)
+				keystorePath = filepath.Join(config.ResolveClientConfigDir(), "keystore.dat")
 			}
+			log.Printf("using keystore path: %s", keystorePath)
+			keystore = crypto.NewKeyStore(keystorePath)
+			if keystore == nil {
+				log.Printf("failed to create keystore")
+			} else if err := keystore.Initialize(e2ePassEntry.Text); err != nil {
+				log.Printf("keystore Initialize: %v", err)
+				keystore = nil
+			} else if gk := keystore.GetSessionKey("global"); gk != nil {
+				log.Printf("global E2E key available: KeyID=%s", gk.KeyID)
+			} else {
+				log.Printf("global E2E key not available after init (see marchat client crypto / env)")
+			}
+		} else if e2eCheck.Checked {
+			log.Printf("E2E enabled but no keystore passphrase provided")
 		}
 
 		// Create GUI using the existing window
@@ -2173,6 +2125,7 @@ func showConfigDialog(fyneApp fyne.App) *MarchatGUI {
 		log.Printf("Passing keystore instance: %p", keystore)
 		adminKey := adminKeyEntry.Text
 		gui := NewMarchatGUIWithWindow(fyneApp, window, cfg, keystore, isAdmin, adminKey)
+		gui.saveConfig()
 
 		// The window content will be replaced by setupUI
 		// Start the connection in background
