@@ -5,7 +5,7 @@ set -e
 APP_NAME="marchat-gui"
 VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ICON_FILE="$SCRIPT_DIR/icon.png"
+ICON_FILE="$SCRIPT_DIR/assets/marchat-transparent.png"
 APP_ID="com.codecodes.marchat"
 REQUIRED_GO="1.23"
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -42,6 +43,18 @@ func capitalizeASCII(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+//go:embed assets/marchat-transparent.png
+var marchatIconPNG []byte
+
+// marchatWindowIcon returns the official marchat logo (same asset as the main marchat repo)
+// for window and task switcher; falls back to a stock icon if embed is empty.
+func marchatWindowIcon() fyne.Resource {
+	if len(marchatIconPNG) == 0 {
+		return theme.ComputerIcon()
+	}
+	return fyne.NewStaticResource("marchat-transparent.png", marchatIconPNG)
 }
 
 const (
@@ -137,6 +150,7 @@ func NewMarchatGUI(cfg *config.Config, keystore *crypto.KeyStore, isAdmin bool, 
 		log.Fatal("Failed to create Fyne app")
 	}
 	log.Printf("Created Fyne app")
+	fyneApp.SetIcon(marchatWindowIcon())
 
 	// Set theme safely (ids align with Flutter / TUI: system, patriot, retro, modern)
 	themeName := "modern"
@@ -162,7 +176,7 @@ func NewMarchatGUI(cfg *config.Config, keystore *crypto.KeyStore, isAdmin bool, 
 	log.Printf("Resizing window...")
 	window.Resize(fyne.NewSize(defaultWindowWidth, defaultWindowHeight))
 	log.Printf("Setting window icon...")
-	window.SetIcon(theme.ComputerIcon()) // Use built-in icon
+	window.SetIcon(marchatWindowIcon())
 	log.Printf("Window setup complete")
 
 	gui := &MarchatGUI{
@@ -221,7 +235,7 @@ func NewMarchatGUIWithApp(fyneApp fyne.App, cfg *config.Config, keystore *crypto
 	log.Printf("Resizing window...")
 	window.Resize(fyne.NewSize(defaultWindowWidth, defaultWindowHeight))
 	log.Printf("Setting window icon...")
-	window.SetIcon(theme.ComputerIcon()) // Use built-in icon
+	window.SetIcon(marchatWindowIcon())
 	log.Printf("Window setup complete")
 
 	gui := &MarchatGUI{
@@ -276,7 +290,7 @@ func NewMarchatGUIWithWindow(fyneApp fyne.App, window fyne.Window, cfg *config.C
 	log.Printf("Resizing window...")
 	window.Resize(fyne.NewSize(defaultWindowWidth, defaultWindowHeight))
 	log.Printf("Setting window icon...")
-	window.SetIcon(theme.ComputerIcon()) // Use built-in icon
+	window.SetIcon(marchatWindowIcon())
 	log.Printf("Window setup complete")
 
 	gui := &MarchatGUI{
@@ -1945,6 +1959,7 @@ func main() {
 		if fyneApp == nil {
 			log.Fatal("Failed to create main Fyne app")
 		}
+		fyneApp.SetIcon(marchatWindowIcon())
 
 		// Show initial configuration dialog and get the GUI ready to run
 		log.Printf("Showing configuration dialog...")

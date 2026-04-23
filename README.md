@@ -26,6 +26,10 @@ Cross-platform desktop client for the [marchat](https://github.com/Cod-e-Codes/m
 - [Gorilla WebSocket](https://github.com/gorilla/websocket)
 - [github.com/Cod-e-Codes/marchat](https://github.com/Cod-e-Codes/marchat) (`client/config`, `client/crypto`, `shared`)
 
+## Branding
+
+The marchat wordmark and logo are copied from the main repo into `assets/marchat-transparent.png` and `assets/marchat-transparent.svg`. The **window and application icon** (task switcher, title bar, packaged Android icon) use the embedded PNG. The in-app **About** dialog is text only. The Android build script (`build-android.sh`) passes the same file to `fyne package` as `-icon`.
+
 ## Installation
 
 ```bash
