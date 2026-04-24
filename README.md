@@ -2,6 +2,19 @@
 
 Cross-platform desktop client for the [marchat](https://github.com/Cod-e-Codes/marchat) chat server: WebSocket chat, file sharing, optional E2E encryption, and admin tools. Theme ids match the Flutter app and TUI: `system`, `patriot`, `retro`, and `modern`.
 
+**Status:** Companion client.
+
+## Relationship to marchat
+
+This is an optional graphical companion for the main [marchat](https://github.com/Cod-e-Codes/marchat) project.
+
+- The terminal client in `marchat` remains the reference client and protocol source.
+- This Go/Fyne client targets protocol compatibility with [PROTOCOL.md](https://github.com/Cod-e-Codes/marchat/blob/main/PROTOCOL.md).
+- Themes and behavior are aligned with the broader client ecosystem where practical.
+- Plugin registry defaults and catalog come from [marchat-plugins](https://github.com/Cod-e-Codes/marchat-plugins).
+
+**Also see:** [marchat_flutter](https://github.com/Cod-e-Codes/marchat_flutter) (primary GUI focus).
+
 ## Features
 
 - Real-time WebSocket messaging (same protocol as `PROTOCOL.md` in the server repo)
